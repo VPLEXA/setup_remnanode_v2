@@ -159,12 +159,39 @@ echo "  6) Bridge-inbound для каскада (VLESS TCP без TLS, 9999/tcp)
 echo ""
 
 WANT_XHTTP=0; WANT_HY2=0; WANT_TCPR=0; WANT_GRPCR=0; WANT_TROJAN=0; WANT_BRIDGE=0
-ask_yn "1) Настроить VLESS XHTTP + Reality?"     y && WANT_XHTTP=1
-ask_yn "2) Настроить Hysteria2?"                y && WANT_HY2=1
-ask_yn "3) Настроить VLESS TCP + Reality?"      y && WANT_TCPR=1
-ask_yn "4) Настроить VLESS gRPC + Reality?"     y && WANT_GRPCR=1
-ask_yn "5) Настроить Trojan WS + TLS?"          y && WANT_TROJAN=1
-ask_yn "6) Настроить bridge-inbound (каскад)?"  y && WANT_BRIDGE=1
+
+if [[ -n "${PROTOCOLS_SELECT:-}" ]]; then
+  log_info "PROTOCOLS_SELECT=$PROTOCOLS_SELECT — выбор протоколов без вопросов"
+  case "$PROTOCOLS_SELECT" in
+    all)
+      WANT_XHTTP=1; WANT_HY2=1; WANT_TCPR=1; WANT_GRPCR=1; WANT_TROJAN=1; WANT_BRIDGE=1
+      ;;
+    none)
+      ;;
+    *)
+      IFS=',' read -ra _proto_codes <<< "$PROTOCOLS_SELECT"
+      for _code in "${_proto_codes[@]}"; do
+        case "$_code" in
+          xhttp)  WANT_XHTTP=1 ;;
+          hy2)    WANT_HY2=1 ;;
+          tcpr)   WANT_TCPR=1 ;;
+          grpcr)  WANT_GRPCR=1 ;;
+          trojan) WANT_TROJAN=1 ;;
+          bridge) WANT_BRIDGE=1 ;;
+          "") ;;
+          *) log_warning "Неизвестный код протокола в PROTOCOLS_SELECT: '$_code' — пропускаю" ;;
+        esac
+      done
+      ;;
+  esac
+else
+  ask_yn "1) Настроить VLESS XHTTP + Reality?"     y && WANT_XHTTP=1
+  ask_yn "2) Настроить Hysteria2?"                y && WANT_HY2=1
+  ask_yn "3) Настроить VLESS TCP + Reality?"      y && WANT_TCPR=1
+  ask_yn "4) Настроить VLESS gRPC + Reality?"     y && WANT_GRPCR=1
+  ask_yn "5) Настроить Trojan WS + TLS?"          y && WANT_TROJAN=1
+  ask_yn "6) Настроить bridge-inbound (каскад)?"  y && WANT_BRIDGE=1
+fi
 
 if (( WANT_XHTTP + WANT_HY2 + WANT_TCPR + WANT_GRPCR + WANT_TROJAN + WANT_BRIDGE == 0 )); then
   log_warning "Ничего не выбрано — выходим."
@@ -172,13 +199,18 @@ if (( WANT_XHTTP + WANT_HY2 + WANT_TCPR + WANT_GRPCR + WANT_TROJAN + WANT_BRIDGE
 fi
 
 echo ""
-log_info "Порты (Enter — оставить по умолчанию):"
-PORT_XHTTP=443;  (( WANT_XHTTP ))  && PORT_XHTTP=$(ask_port "VLESS XHTTP+Reality" 443)
-PORT_HY2=443;    (( WANT_HY2 ))    && PORT_HY2=$(ask_port "Hysteria2 (udp)" 443)
-PORT_TCPR=4443;  (( WANT_TCPR ))   && PORT_TCPR=$(ask_port "VLESS TCP+Reality" 4443)
-PORT_GRPCR=8443; (( WANT_GRPCR ))  && PORT_GRPCR=$(ask_port "VLESS gRPC+Reality" 8443)
-PORT_TROJAN=2096;(( WANT_TROJAN )) && PORT_TROJAN=$(ask_port "Trojan WS+TLS" 2096)
-PORT_BRIDGE=9999;(( WANT_BRIDGE )) && PORT_BRIDGE=$(ask_port "Bridge-inbound" 9999)
+PORT_XHTTP=443; PORT_HY2=443; PORT_TCPR=4443; PORT_GRPCR=8443; PORT_TROJAN=2096; PORT_BRIDGE=9999
+if [[ -z "${PROTOCOLS_SELECT:-}" ]]; then
+  log_info "Порты (Enter — оставить по умолчанию):"
+  (( WANT_XHTTP ))  && PORT_XHTTP=$(ask_port "VLESS XHTTP+Reality" 443)
+  (( WANT_HY2 ))    && PORT_HY2=$(ask_port "Hysteria2 (udp)" 443)
+  (( WANT_TCPR ))   && PORT_TCPR=$(ask_port "VLESS TCP+Reality" 4443)
+  (( WANT_GRPCR ))  && PORT_GRPCR=$(ask_port "VLESS gRPC+Reality" 8443)
+  (( WANT_TROJAN )) && PORT_TROJAN=$(ask_port "Trojan WS+TLS" 2096)
+  (( WANT_BRIDGE )) && PORT_BRIDGE=$(ask_port "Bridge-inbound" 9999)
+else
+  log_info "PROTOCOLS_SELECT задан — использую порты по умолчанию (443/443/4443/8443/2096/9999)"
+fi
 
 # Один TCP-порт не могут делить два inbound'а
 declare -A USED_TCP=()
@@ -228,8 +260,10 @@ REALITY_PRIV_GRPC="";  REALITY_PUB_GRPC=""
 
 if (( WANT_XHTTP || WANT_TCPR || WANT_GRPCR )); then
   echo ""
-  read -r -p "SNI/dest для Reality (по умолчанию www.github.com): " REALITY_SNI_IN || true
-  REALITY_SNI="${REALITY_SNI_IN:-www.github.com}"
+  if [[ -z "${PROTOCOLS_SELECT:-}" ]]; then
+    read -r -p "SNI/dest для Reality (по умолчанию www.github.com): " REALITY_SNI_IN || true
+    REALITY_SNI="${REALITY_SNI_IN:-www.github.com}"
+  fi
 
   log_info "Генерация Reality-ключей..."
   if (( WANT_XHTTP )); then
@@ -245,7 +279,7 @@ if (( WANT_XHTTP || WANT_TCPR || WANT_GRPCR )); then
 fi
 
 TROJAN_WS_PATH="/ws"
-if (( WANT_TROJAN )); then
+if (( WANT_TROJAN )) && [[ -z "${PROTOCOLS_SELECT:-}" ]]; then
   read -r -p "Путь WebSocket для Trojan (по умолчанию /ws): " TROJAN_WS_PATH_IN || true
   TROJAN_WS_PATH="${TROJAN_WS_PATH_IN:-/ws}"
 fi

@@ -77,8 +77,13 @@ echo ""
 # Проверка существует ли .env
 if [[ -f .env ]]; then
   log_warning ".env уже существует."
-  read -p "Использовать существующий .env? (y/n) " -n 1 -r
-  echo
+  if [[ "${INSTALL_SH_DRIVEN:-0}" == "1" ]]; then
+    REPLY="y"
+    log_info "INSTALL_SH_DRIVEN=1 — использую существующий .env без вопроса"
+  else
+    read -p "Использовать существующий .env? (y/n) " -n 1 -r
+    echo
+  fi
   if [[ $REPLY =~ ^[Yy]$ ]]; then
     # Загрузить значения из .env
     DOMAIN=$(grep -m1 -E '^DOMAIN=' .env | cut -d= -f2- | tr -d '\r' | sed 's/^"\(.*\)"$/\1/')
@@ -347,9 +352,14 @@ echo ""
 log_info "=== ФАЗА 7: Настройка протоколов Xray ==="
 echo ""
 
-read -p "Настроить протоколы Xray сейчас? (Y/n) " -n 1 -r PROTO_REPLY || true
-echo
-PROTO_REPLY="${PROTO_REPLY:-y}"
+if [[ -n "${PROTOCOLS_SELECT:-}" ]]; then
+  PROTO_REPLY="y"
+  log_info "PROTOCOLS_SELECT=${PROTOCOLS_SELECT} — настраиваю протоколы без вопроса"
+else
+  read -p "Настроить протоколы Xray сейчас? (Y/n) " -n 1 -r PROTO_REPLY || true
+  echo
+  PROTO_REPLY="${PROTO_REPLY:-y}"
+fi
 if [[ $PROTO_REPLY =~ ^[YyДд]$ ]]; then
   if bash scripts/setup-protocols.sh; then
     log_success "Протоколы настроены, конфиг: $ROOT/xray-multiconfig.json"
