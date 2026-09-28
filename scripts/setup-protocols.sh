@@ -115,6 +115,13 @@ else
   log_warning "docker-compose.yml не найден в $ROOT — пропускаю проверку compose."
 fi
 
+# letsencrypt/archive/ иногда стоит 700 root:root (certbot) — без traverse-бита
+# для admin'а -f/-e через live/ -> archive/ молча даёт false (EACCES), и симлинк
+# ниже не создаётся даже при повторных прогонах на старых установках.
+SUDO=""
+sudo -n true &>/dev/null && SUDO="sudo"
+$SUDO chmod o+x letsencrypt/archive 2>/dev/null || true
+
 # Симлинк privkey.key → privkey.pem (как требует документация Xray SSL)
 LIVE_DIR="letsencrypt/live/${DOMAIN}"
 if [[ -f "$LIVE_DIR/privkey.pem" && ! -e "$LIVE_DIR/privkey.key" ]]; then

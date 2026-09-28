@@ -29,6 +29,13 @@ docker compose --profile cert run --rm certbot certonly \
   --no-eff-email \
   -d "$DOMAIN"
 
+# certbot создаёт letsencrypt/archive/ с правами 700 root:root — без traverse-бита
+# для admin'а (от которого выполняется этот скрипт) любой -f/-e через симлинк
+# live/ -> archive/ молча падает в false (EACCES), и симлинк ниже не создаётся.
+SUDO=""
+sudo -n true &>/dev/null && SUDO="sudo"
+$SUDO chmod o+x letsencrypt/archive 2>/dev/null || true
+
 LIVE="letsencrypt/live/${DOMAIN}"
 if [[ -f "$LIVE/privkey.pem" && ! -e "$LIVE/privkey.key" ]]; then
   ( cd "$LIVE" && ln -sf privkey.pem privkey.key )

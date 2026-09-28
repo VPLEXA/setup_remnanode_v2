@@ -265,7 +265,14 @@ ensure_admin_user() {
   fi
 
   if ! id admin &>/dev/null; then
-    useradd -m -s /bin/bash admin
+    # На некоторых образах (напр. Ubuntu 24.04) системная группа admin уже
+    # существует без одноимённого пользователя — useradd по умолчанию пытается
+    # создать личную группу admin и падает на конфликте. Переиспользуем её.
+    if getent group admin &>/dev/null; then
+      useradd -m -s /bin/bash -g admin admin
+    else
+      useradd -m -s /bin/bash admin
+    fi
     log_success "Пользователь admin создан"
   else
     log_success "Пользователь admin уже существует"
